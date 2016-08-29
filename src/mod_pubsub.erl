@@ -1867,7 +1867,18 @@ delete_node(Host, Node, Owner) ->
 			Error -> Error
 		    end;
 		_ ->
-		    {error, ?ERRT_FORBIDDEN(?MYLANG, <<"You're not an owner">>)}
+		    MyAuthorized = acl:match_rule(Host,register_from,Owner),
+                    if
+                        MyAuthorized == allow ->
+                           SubsByDepth = get_node_subs_by_depth(Host, Node, service_jid(Host)),
+                           Removed = tree_call(Host, delete_node, [Host, Node]),
+                           case node_call(Host, Type, delete_node, [Removed]) of
+                               {result, Res} -> {result, {SubsByDepth, Res}};
+                               Error -> Error
+                           end;
+                        true ->
+                           {error, ?ERRT_FORBIDDEN(?MYLANG, <<"You're not an owner">>)}
+                   end
 	    end
     end,
     Reply = [],
