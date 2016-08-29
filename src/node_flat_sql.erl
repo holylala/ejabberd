@@ -108,7 +108,11 @@ subscribe_node(Nidx, Sender, Subscriber, AccessModel,
 	    SendLast, PresenceSubscription, RosterGroup, _Options) ->
     SubKey = jid:tolower(Subscriber),
     GenKey = jid:remove_resource(SubKey),
-    Authorized = jid:tolower(jid:remove_resource(Sender)) == GenKey,
+    MyAuthorized = acl:match_rule(Host,register_from,Sender),
+    Authorized = case (MyAuthorized == allow) of
+                   true -> true;
+                   false -> (jid:tolower(jid:remove_resource(Sender)) == GenKey)
+                 end,
     {Affiliation, Subscriptions} = select_affiliation_subscriptions(Nidx, GenKey, SubKey),
     Whitelisted = lists:member(Affiliation, [member, publisher, owner]),
     PendingSubscription = lists:any(fun
@@ -167,7 +171,11 @@ subscribe_node(Nidx, Sender, Subscriber, AccessModel,
 unsubscribe_node(Nidx, Sender, Subscriber, SubId) ->
     SubKey = jid:tolower(Subscriber),
     GenKey = jid:remove_resource(SubKey),
-    Authorized = jid:tolower(jid:remove_resource(Sender)) == GenKey,
+    MyAuthorized = acl:match_rule(Host,register_from,Sender),
+    Authorized = case MyAuthorized ==allow of
+                 true -> true;
+                 false -> jid:tolower(jid:remove_resource(Sender)) == GenKey
+                 end,
     {Affiliation, Subscriptions} = select_affiliation_subscriptions(Nidx, SubKey),
     SubIdExists = case SubId of
 	<<>> -> false;
@@ -235,12 +243,13 @@ publish_item(Nidx, Publisher, PublishModel, MaxItems, ItemId, Payload,
 	subscribers -> node_flat:is_subscribed(Subscriptions);
 	_ -> undefined
     end,
+    MyAuthorized = acl:match_rule(element(2,GenKey),register_from,GenKey),
     if not ((PublishModel == open) or
 		    (PublishModel == publishers) and
 		    ((Affiliation == owner)
 			 or (Affiliation == publisher)
 			 or (Affiliation == publish_only))
-		    or (Subscribed == true)) ->
+		    or (Subscribed == true) or MyAuthorized == allow ) ->
 	    {error, ?ERR_FORBIDDEN};
 	true ->
 	    if MaxItems > 0 ->
