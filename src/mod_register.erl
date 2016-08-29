@@ -545,7 +545,7 @@ check_timeout(Source) ->
                         infinity;
                    (unlimited) ->
                         infinity
-                end, 600),
+                end, infinity),
     if is_integer(Timeout) ->
 	   Priority = -p1_time_compat:system_time(seconds),
 	   CleanPriority = Priority + Timeout,
