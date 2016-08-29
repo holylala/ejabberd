@@ -431,8 +431,25 @@ try_register(User, Server, Password, SourceRaw, Lang) ->
 				  remove_timeout(Source),
 				  case Error of
 				    {atomic, exists} ->
-					Txt = <<"User already exists">>,
-					{error, ?ERRT_CONFLICT(Lang, Txt)};
+					%%Txt = <<"User already exists">>,
+                                        %%{error, ?ERRT_CONFLICT(Lang, Txt)};
+                                        %%?INFO_MSG("i am test change password by administrator:~p",[User]),
+                                        case ejabberd_auth:set_password(User, Server, Password)
+                                           of
+                                          ok ->
+                                              send_welcome_message(JID),
+                                              send_registration_notifications(
+                                              ?MODULE, JID, Source),
+                                              ok;
+                                          {error, not_allowed} ->
+                                                {error, ?ERR_NOT_ALLOWED};
+                                          {error, invalid_jid} ->
+                                                {error, ?ERR_JID_MALFORMED};
+                                          Err ->
+                                                ?ERROR_MSG("failed to register user ~s@~s: ~p",
+                                                [User, Server, Err]),
+                                                {error, ?ERR_INTERNAL_SERVER_ERROR}
+                                        end;
 				    {error, invalid_jid} ->
 					{error, ?ERR_JID_MALFORMED};
 				    {error, not_allowed} ->
