@@ -431,6 +431,7 @@ try_register(User, Server, Password, SourceRaw, Lang) ->
 				  remove_timeout(Source),
 				  case Error of
 				    {atomic, exists} ->
+				    
 					%%Txt = <<"User already exists">>,
                                         %%{error, ?ERRT_CONFLICT(Lang, Txt)};
                                         %%?INFO_MSG("i am test change password by administrator:~p",[User]),
