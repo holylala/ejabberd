@@ -72,6 +72,7 @@ start_link() ->
 			  []).
 
 process_iq(From, To, Packet) ->
+%%	?INFO_MSG("MYTEST5 ejabberd local process iq: ~p ~p ~p~n",[From,To,Packet]),
     IQ = jlib:iq_query_info(Packet),
     case IQ of
       #iq{xmlns = XMLNS, lang = Lang} ->
@@ -84,6 +85,7 @@ process_iq(From, To, Packet) ->
 		   true -> ok
 		end;
 	    [{_, Module, Function, Opts}] ->
+%%		?INFO_MSG("MYSTEST5 ejabberd local process iq found:~p ~p~n",[self(),Packet]),
 		gen_iq_handler:handle(Host, Module, Function, Opts,
 				      From, To, IQ);
 	    [] ->
@@ -265,6 +267,7 @@ do_route(From, To, Packet) ->
     ?DEBUG("local route~n\tfrom ~p~n\tto ~p~n\tpacket "
 	   "~P~n",
 	   [From, To, Packet, 8]),
+%%	?INFO_MSG("MYTEST6 ejabberd local do_route message: ~p ~p ~p~n",[From,To,Packet]),
     if To#jid.luser /= <<"">> ->
 	   ejabberd_sm:route(From, To, Packet);
        To#jid.lresource == <<"">> ->

@@ -33,6 +33,7 @@
 
 %% API
 -export([route/3,
+	route2/3,
 	 route_error/4,
 	 register_route/1,
 	 register_route/2,
@@ -81,7 +82,15 @@ route(From, To, Packet) ->
 	_ ->
 	    ok
     end.
-
+-spec route2(jid(), jid(), xmlel()) -> ok.
+route2(From, To, Packet) ->
+	case catch do_route2(From, To, Packet) of
+		{'EXIT', Reason} ->
+			?ERROR_MSG("~p~nwhen processing: ~p",
+				[Reason, {From, To, Packet}]);
+		_ ->
+			ok
+	end.
 %% Route the error packet only if the originating packet is not an error itself.
 %% RFC3920 9.3.1
 -spec route_error(jid(), jid(), xmlel(), xmlel()) -> ok.
@@ -356,15 +365,22 @@ do_route(OrigFrom, OrigTo, OrigPacket) ->
 	of
       {From, To, Packet} ->
 	  LDstDomain = To#jid.lserver,
+%%				?INFO_MSG("MYTEST7 ejabberd_router do route:~p ~p ~p~n",[OrigFrom, OrigTo, OrigPacket]),
 	  case mnesia:dirty_read(route, LDstDomain) of
-	    [] -> ejabberd_s2s:route(From, To, Packet);
+	    [] ->
+%%				?INFO_MSG("MYTEST7 ejabberd_router do route not local:~p ~p ~p~n",[OrigFrom, OrigTo, OrigPacket]),
+				ejabberd_s2s:route(From, To, Packet);
 	    [R] ->
+%%				?INFO_MSG("MYTEST7 ejabberd_router do route local:~p ~p ~p~n",[OrigFrom, OrigTo, OrigPacket]),
 		Pid = R#route.pid,
 		if node(Pid) == node() ->
 		       case R#route.local_hint of
 			 {apply, Module, Function} ->
+%%				 ?INFO_MSG("MYTEST6 ejabberd router do route function :~p ~p ~p ~p ~p~n",[Module,Function,From,To,Packet]),
 			     Module:Function(From, To, Packet);
-			 _ -> Pid ! {route, From, To, Packet}
+			 _ ->
+%%				 ?INFO_MSG("MYTEST5 ejabberd router do route pid:~p~p~p~p~n",[Pid,From,To,Packet]),
+				 Pid ! {route, From, To, Packet}
 		       end;
 		   is_pid(Pid) -> Pid ! {route, From, To, Packet};
 		   true -> drop
@@ -413,6 +429,18 @@ do_route(OrigFrom, OrigTo, OrigPacket) ->
 	  end;
       drop -> ok
     end.
+
+do_route2(OrigFrom, OrigTo, OrigPacket) ->
+	?DEBUG("route~n\tfrom ~p~n\tto ~p~n\tpacket "
+	"~p~n",
+		[OrigFrom, OrigTo, OrigPacket]),
+	case ejabberd_hooks:run_fold(filter_packet,
+		{OrigFrom, OrigTo, OrigPacket}, [])
+	of
+		{From, To, Packet} ->
+			LDstDomain = To#jid.lserver;
+		drop -> ok
+	end.
 
 get_component_number(LDomain) ->
     ejabberd_config:get_option(

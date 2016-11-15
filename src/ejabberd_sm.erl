@@ -463,6 +463,7 @@ do_route(From, To, #xmlel{} = Packet) ->
     ?DEBUG("session manager~n\tfrom ~p~n\tto ~p~n\tpacket "
 	   "~P~n",
 	   [From, To, Packet, 8]),
+%%	?INFO_MSG("MYTEST5 ejabberd sm do route message head:~p ~p ~p~n",[From,To,Packet]),
     #jid{user = User, server = Server,
 	 luser = LUser, lserver = LServer, lresource = LResource} = To,
     #xmlel{name = Name, attrs = Attrs} = Packet,
@@ -614,6 +615,7 @@ is_privacy_allow(From, To, Packet, PrivacyList) ->
 			       in]).
 
 route_message(From, To, Packet, Type) ->
+%%	?INFO_MSG("MYTEST ejabberd sm route message HEAD : ~p ~p ~p~n",[From,To,Packet]),
     LUser = To#jid.luser,
     LServer = To#jid.lserver,
     PrioRes = get_user_present_resources(LUser, LServer),
@@ -632,6 +634,7 @@ route_message(From, To, Packet, Type) ->
 				      Session = lists:max(Ss),
 				      Pid = element(2, Session#session.sid),
 				      ?DEBUG("sending to process ~p~n", [Pid]),
+%%						?INFO_MSG("MYTEST ejabberd sm route message END:~p ~p ~p ~p~n",[Pid,From,To,Packet]),
 				      Pid ! {route, From, To, Packet}
 				end;
 			    %% Ignore other priority:

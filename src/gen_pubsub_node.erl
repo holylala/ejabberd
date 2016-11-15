@@ -44,8 +44,8 @@
 -type(payload() :: mod_pubsub:payload()).
 
 -callback init(Host :: binary(),
-	ServerHost :: binary(),
-	Opts :: [any()]) -> atom().
+		ServerHost :: binary(),
+		Opts :: [any()]) -> atom().
 
 -callback terminate(Host :: host(),
 	ServerHost :: binary()) -> atom().

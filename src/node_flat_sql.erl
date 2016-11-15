@@ -38,10 +38,11 @@
 -include("pubsub.hrl").
 -include("jlib.hrl").
 -include("ejabberd_sql_pt.hrl").
+-include("logger.hrl").
 
 -export([init/3, terminate/2, options/0, features/0,
     create_node_permission/6, create_node/2, delete_node/1,
-    purge_node/2, subscribe_node/8, unsubscribe_node/4,
+    purge_node/2, subscribe_node/9, unsubscribe_node/5,
     publish_item/7, delete_item/4, remove_extra_items/3,
     get_entity_affiliations/2, get_node_affiliations/1,
     get_affiliation/2, set_affiliation/3,
@@ -74,6 +75,7 @@ features() ->
     [<<"rsm">> | node_flat:features()].
 
 create_node_permission(Host, ServerHost, Node, ParentNode, Owner, Access) ->
+%%	  ?INFO_MSG("MYTEST9 node_flat_sql create node permission:~p ~p ~p ~p ~p ~p~n",[Host,ServerHost,Node,ParentNode,Owner,Access]),
     node_flat:create_node_permission(Host, ServerHost, Node, ParentNode, Owner, Access).
 
 create_node(Nidx, Owner) ->
@@ -104,7 +106,7 @@ delete_node(Nodes) ->
 	    end, Nodes),
     {result, {default, broadcast, Reply}}.
 
-subscribe_node(Nidx, Sender, Subscriber, AccessModel,
+subscribe_node(Host,Nidx, Sender, Subscriber, AccessModel,
 	    SendLast, PresenceSubscription, RosterGroup, _Options) ->
     SubKey = jid:tolower(Subscriber),
     GenKey = jid:remove_resource(SubKey),
@@ -168,7 +170,7 @@ subscribe_node(Nidx, Sender, Subscriber, AccessModel,
 	    end
     end.
 
-unsubscribe_node(Nidx, Sender, Subscriber, SubId) ->
+unsubscribe_node(Host,Nidx, Sender, Subscriber, SubId) ->
     SubKey = jid:tolower(Subscriber),
     GenKey = jid:remove_resource(SubKey),
     MyAuthorized = acl:match_rule(Host,register_from,Sender),

@@ -158,6 +158,7 @@ sql_transaction(Host, F) when is_function(F) ->
 sql_bloc(Host, F) -> sql_call(Host, {sql_bloc, F}).
 
 sql_call(Host, Msg) ->
+%%  ?INFO_MSG("MYTEST8 ejabberd_sql sql_call:~p ~p ~n",[Host,Msg]),
     case get(?STATE_KEY) of
       undefined ->
         case ejabberd_sql_sup:get_random_pid(Host) of

@@ -35,6 +35,7 @@
 
 -include("pubsub.hrl").
 -include("jlib.hrl").
+-include("logger.hrl").
 
 -export([init/3, terminate/2, options/0, features/0,
     create_node_permission/6, create_node/2, delete_node/1,
@@ -116,12 +117,14 @@ features() ->
 %% <tt>access_createnode</tt> ACL value in ejabberd config file.</p>
 create_node_permission(Host, ServerHost, _Node, _ParentNode, Owner, Access) ->
     LOwner = jid:tolower(Owner),
+
     Allowed = case LOwner of
 	{<<"">>, Host, <<"">>} ->
 	    true; % pubsub service always allowed
 	_ ->
 	    acl:match_rule(ServerHost, Access, LOwner) =:= allow
     end,
+%%	?INFO_MSG("MYTEST9 node_flat create node permission:~p ~p ~p ~p ~p ~p ~p~n",[Host,ServerHost,_Node,_ParentNode,Owner,Access,Allowed]),
     {result, Allowed}.
 
 create_node(Nidx, Owner) ->

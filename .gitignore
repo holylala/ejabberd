@@ -46,3 +46,4 @@ XmppAddr.hrl
 /_build
 /mnesiadb
 /.rebar
+/.idea

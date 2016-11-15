@@ -104,11 +104,17 @@ create_node_permission(Host, ServerHost, _Node, _ParentNode, Owner, Access) ->
 	_ ->
 	    case acl:match_rule(ServerHost, Access, LOwner) of
 		allow ->
+%%			?INFO_MSG("MYTEST9 node_pep create node permission allowed:~p ~p ~p ~p ~p ~p~n",[Host,ServerHost,_Node,_ParentNode,Owner,Access]),
 		    case Host of
-			{User, Server, _} -> true;
-			_ -> false
+			{User, Server, _} ->
+%%				?INFO_MSG("MYTEST9 node_pep create node permission allowed host is:~p ~p ~p ~p ~p ~p~n",[Host,ServerHost,_Node,_ParentNode,Owner,Access]),
+				true;
+			_ ->
+%%				?INFO_MSG("MYTEST9 node_pep create node permission allowed host is not:~p ~p ~p ~p ~p ~p~n",[Host,ServerHost,_Node,_ParentNode,Owner,Access]),
+				false
 		    end;
 		_ ->
+%%			?INFO_MSG("MYTEST9 node_pep create node permission not allowed:~p ~p ~p ~p ~p ~p~n",[Host,ServerHost,_Node,_ParentNode,Owner,Access]),
 		    false
 	    end
     end,

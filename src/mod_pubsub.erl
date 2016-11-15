@@ -59,6 +59,7 @@
 
 %% exported iq handlers
 -export([iq_sm/3]).
+%%-export([process_iq/3]).
 
 %% exports for console debug manual use
 -export([create_node/5, create_node/7, delete_node/3,
@@ -239,13 +240,17 @@ stop(Host) ->
 init([ServerHost, Opts]) ->
     ?DEBUG("pubsub init ~p ~p", [ServerHost, Opts]),
     Host = gen_mod:get_opt_host(ServerHost, Opts, <<"pubsub.@HOST@">>),
+%%	 ?INFO_MSG("MYTEST4 pubsub init ~p ~p ~n", [ServerHost, Host]),
     ejabberd_router:register_route(Host, ServerHost),
     Access = gen_mod:get_opt(access_createnode, Opts,
 	    fun(A) when is_atom(A) -> A end, all),
     PepOffline = gen_mod:get_opt(ignore_pep_from_offline, Opts,
 	    fun(A) when is_boolean(A) -> A end, true),
-    IQDisc = gen_mod:get_opt(iqdisc, Opts,
-	    fun gen_iq_handler:check_type/1, one_queue),
+%%    IQDisc = gen_mod:get_opt(iqdisc, Opts,
+%%	    fun gen_iq_handler:check_type/1, one_queue),
+%%	we used not parallel 10 threads to process publish request
+		IQDisc = gen_mod:get_opt(iqdisc, Opts,
+			fun gen_iq_handler:check_type/1, 10),
     LastItemCache = gen_mod:get_opt(last_item_cache, Opts,
 	    fun(A) when is_boolean(A) -> A end, false),
     MaxItemsNode = gen_mod:get_opt(max_items_node, Opts,
@@ -307,10 +312,16 @@ init([ServerHost, Opts]) ->
 		?MODULE, disco_sm_features, 75),
 	    ejabberd_hooks:add(disco_sm_items, ServerHost,
 		?MODULE, disco_sm_items, 75),
-	    gen_iq_handler:add_iq_handler(ejabberd_sm, ServerHost,
-		?NS_PUBSUB, ?MODULE, iq_sm, IQDisc),
-	    gen_iq_handler:add_iq_handler(ejabberd_sm, ServerHost,
-		?NS_PUBSUB_OWNER, ?MODULE, iq_sm, IQDisc);
+		?INFO_MSG("mod_pubsub iqdisc:~p~n",[IQDisc]),
+%%	    gen_iq_handler:add_iq_handler(ejabberd_sm, ServerHost,
+%%		?NS_PUBSUB, ?MODULE, iq_sm, IQDisc),
+%%	    gen_iq_handler:add_iq_handler(ejabberd_sm, ServerHost,
+%%		?NS_PUBSUB_OWNER, ?MODULE, iq_sm, IQDisc);
+%%   we use ejabberd local iq handler ,notice host not the serverhost,because process iq is based on to#lserver,which is pubsub.*
+		gen_iq_handler:add_iq_handler(ejabberd_local, Host,
+			?NS_PUBSUB, ?MODULE, iq_sm, IQDisc),
+		gen_iq_handler:add_iq_handler(ejabberd_local, Host,
+			?NS_PUBSUB_OWNER, ?MODULE, iq_sm, IQDisc);
 	false ->
 	    ok
     end,
@@ -836,6 +847,7 @@ handle_cast(_Msg, State) -> {noreply, State}.
 %% @private
 handle_info({route, From, To, Packet},
 	    #state{server_host = ServerHost, access = Access, plugins = Plugins} = State) ->
+%%	?INFO_MSG("MYTEST5 mod pubsub handle info trace:~p ~p~n",[self(),Packet]),
     case catch do_route(ServerHost, Access, Plugins, To#jid.lserver, From, To, Packet) of
 	{'EXIT', Reason} -> ?ERROR_MSG("~p", [Reason]);
 	_ -> ok
@@ -916,6 +928,8 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%% Internal functions
 %%--------------------------------------------------------------------
 do_route(ServerHost, Access, Plugins, Host, From, To, Packet) ->
+%%	?INFO_MSG("mode_pubsub do route ~p ~p ~p ~p ~p ~p ~p~n",[ServerHost, Access, Plugins, Host, From, To, Packet]),
+	Start=os:timestamp(),
     #xmlel{name = Name, attrs = Attrs} = Packet,
     case To of
 	#jid{luser = <<>>, lresource = <<>>} ->
@@ -938,7 +952,11 @@ do_route(ServerHost, Access, Plugins, Host, From, To, Packet) ->
 				{error, Error} ->
 				    jlib:make_error_reply(Packet, Error)
 			    end,
+				Cost=timer:now_diff(os:timestamp(),Start)/1000,
+%%				?INFO_MSG("MYTEST6 discover cost:~p~n",[Cost]),
 			    ejabberd_router:route(To, From, Res);
+%%				Cost2=timer:now_diff(os:timestamp(),Start)/1000,
+%%				?INFO_MSG("MYTEST6 discover all cost:~p~n",[Cost2]);
 			#iq{type = get, xmlns = ?NS_DISCO_ITEMS, sub_el = SubEl} = IQ ->
 			    #xmlel{attrs = QAttrs} = SubEl,
 			    Node = fxml:get_attr_s(<<"node">>, QAttrs),
@@ -954,15 +972,21 @@ do_route(ServerHost, Access, Plugins, Host, From, To, Packet) ->
 			    end,
 			    ejabberd_router:route(To, From, Res);
 			#iq{type = IQType, xmlns = ?NS_PUBSUB, lang = Lang, sub_el = SubEl} = IQ ->
-			    Res = case iq_pubsub(Host, ServerHost, From, IQType,
-				    SubEl, Lang, Access, Plugins)
-			    of
-				{result, IQRes} ->
-				    jlib:iq_to_xml(IQ#iq{type = result, sub_el = IQRes});
-				{error, Error} ->
-				    jlib:make_error_reply(Packet, Error)
-			    end,
-			    ejabberd_router:route(To, From, Res);
+%%			    Res = case iq_pubsub(Host, ServerHost, From, IQType,
+%%				    SubEl, Lang, Access, Plugins)
+%%			    of
+%%				{result, IQRes} ->
+%%				    jlib:iq_to_xml(IQ#iq{type = result, sub_el = IQRes});
+%%				{error, Error} ->
+%%				    jlib:make_error_reply(Packet, Error)
+%%			    end,
+%%				Cost=timer:now_diff(os:timestamp(),Start)/1000,
+%%				?INFO_MSG("MYTEST6 publish cost:~p~n",[Cost]),
+%%			    ejabberd_router:route(To, From, Res),
+%%					Cost2=timer:now_diff(os:timestamp(),Start)/1000,
+%%			?INFO_MSG("MYTEST6 all cost:~p~n",[Cost2]);
+				ejabberd_local:route(From,To,Packet);
+%%				process_iq(From,To,IQ);
 			#iq{type = IQType, xmlns = ?NS_PUBSUB_OWNER, lang = Lang, sub_el = SubEl} = IQ ->
 			    Res = case iq_pubsub_owner(Host, ServerHost, From,
 				    IQType, SubEl, Lang)
@@ -1163,18 +1187,48 @@ iq_disco_items(Host, Item, From, RSM) ->
 
 -spec iq_sm(From :: jid(), To :: jid(), IQ :: iq_request()) -> iq_result() | iq_error().
 iq_sm(From, To, #iq{type = Type, sub_el = SubEl, xmlns = XMLNS, lang = Lang} = IQ) ->
-    ServerHost = To#jid.lserver,
+%%	?INFO_MSG("mod pubsub iq_sm :~p~n",[IQ]),
+    Host = To#jid.lserver,
+	  ServerHost=ejabberd_regexp:replace(Host,<<"pubsub.">>,<<"">>),
     LOwner = jid:tolower(jid:remove_resource(To)),
     Res = case XMLNS of
 	?NS_PUBSUB ->
-	    iq_pubsub(LOwner, ServerHost, From, Type, SubEl, Lang);
+	    iq_pubsub(Host, ServerHost, From, Type, SubEl, Lang);
 	?NS_PUBSUB_OWNER ->
-	    iq_pubsub_owner(LOwner, ServerHost, From, Type, SubEl, Lang)
+	    iq_pubsub_owner(Host, ServerHost, From, Type, SubEl, Lang)
     end,
     case Res of
 	{result, IQRes} -> IQ#iq{type = result, sub_el = IQRes};
 	{error, Error} -> IQ#iq{type = error, sub_el = [Error, SubEl]}
     end.
+%%%%-spec process_iq(From :: jid(), To :: jid(), IQ :: iq_request()) -> iq_result() | iq_error().
+%%process_iq(From, To, #iq{type = Type, sub_el = SubEl, xmlns = XMLNS, lang = Lang} = IQ) ->
+%%%%	?INFO_MSG("MYTEST5 mod pubsub prcess iq :~p ~p~n",[IQ,self()]),
+%%	ServerHost = To#jid.lserver,
+%%	LOwner = jid:tolower(jid:remove_resource(To)),
+%%	Start=os:timestamp(),
+%%	Res = case XMLNS of
+%%					?NS_PUBSUB ->
+%%						case iq_pubsub(LOwner, ServerHost, From, Type, SubEl, Lang) of
+%%							{result, IQRes} ->
+%%								jlib:iq_to_xml(IQ#iq{type = result, sub_el = IQRes});
+%%							{error, Error} ->
+%%								jlib:make_error_reply(jlib:iq_to_xml(IQ), Error)
+%%						end;
+%%					?NS_PUBSUB_OWNER ->
+%%						case iq_pubsub_owner(LOwner, ServerHost, From, Type, SubEl, Lang) of
+%%							{result,IQRes}->
+%%								jlib:iq_to_xml(IQ#iq{type = result, sub_el = IQRes});
+%%							{error,Error} ->
+%%								jlib:make_error_reply(jlib:iq_to_xml(IQ),Error)
+%%						end
+%%				end,
+%%%%	?INFO_MSG("MYTEST5 mod pubsub prcess iq end :~p ~p~n",[Res,self()]),
+%%		Cost=timer:now_diff(os:timestamp(),Start)/1000,
+%%		?INFO_MSG("MYTEST6 process_iq cost:~p~p~n",[Cost,Res]),
+%%		ejabberd_router:route(To, From, Res).
+%%%%    end.
+
 
 iq_get_vcard(Lang) ->
     [#xmlel{name = <<"FN">>, attrs = [],
@@ -1218,6 +1272,7 @@ iq_pubsub(Host, ServerHost, From, IQType, SubEl, Lang, Access, Plugins) ->
 			    {error,
 				extended_error(?ERR_FEATURE_NOT_IMPLEMENTED, unsupported, <<"create-nodes">>)};
 			true ->
+%%				?INFO_MSG("MYTEST9 mod_pubsub iq_pubsub create node:~p ~p~n",[Type,Plugins]),
 			    create_node(Host, ServerHost, Node, From, Type, Access, Config)
 		    end;
 		{set, <<"publish">>} ->
@@ -1789,6 +1844,7 @@ create_node(Host, ServerHost, Node, Owner, GivenType, Access, Configuration) ->
 			<<>> -> [];
 			_ -> [Parent]
 		    end,
+%%				?INFO_MSG("MYTEST9 mode_pubsub create node permission:~p ~p ~p ~p ~p ~p~n",[Host,ServerHost,Node,Parent,Owner,Access]),
 		    case node_call(Host, Type, create_node_permission,
 			    [Host, ServerHost, Node, Parent, Owner, Access])
 		    of
@@ -1995,13 +2051,13 @@ subscribe_node(Host, Node, From, JID, Configuration) ->
 		    {PS, RG} = get_presence_and_roster_permissions(Host, Subscriber,
 			    Owners, AccessModel, AllowedGroups),
 		    node_call(Host, Type, subscribe_node,
-			[Nidx, From, Subscriber, AccessModel,
+			[Host,Nidx, From, Subscriber, AccessModel,
 			    SendLast, PS, RG, SubOpts])
 	    end
     end,
     Reply = fun (Subscription) ->
-	    SubAttrs = case Subscription of
-		{subscribed, SubId} ->
+			SubAttrs = case Subscription of
+									 {subscribed, SubId} ->
 		    [{<<"subscription">>, subscription_to_string(subscribed)},
 			{<<"subid">>, SubId}, {<<"node">>, Node}];
 		Other ->
@@ -2060,7 +2116,7 @@ unsubscribe_node(Host, Node, From, JID, SubId) when is_binary(JID) ->
     unsubscribe_node(Host, Node, From, string_to_ljid(JID), SubId);
 unsubscribe_node(Host, Node, From, Subscriber, SubId) ->
     Action = fun (#pubsub_node{type = Type, id = Nidx}) ->
-	    node_call(Host, Type, unsubscribe_node, [Nidx, From, Subscriber, SubId])
+	    node_call(Host, Type, unsubscribe_node, [Host,Nidx, From, Subscriber, SubId])
     end,
     case transaction(Host, Node, Action, sync_dirty) of
 	{result, {_, default}} ->
@@ -3345,13 +3401,48 @@ get_options_for_subs(Host, Nidx, Subs, true) ->
 	end, [], Subs).
 
 broadcast_stanza(Host, _Node, _Nidx, _Type, NodeOptions, SubsByDepth, NotifyType, BaseStanza, SHIM) ->
-    NotificationType = get_option(NodeOptions, notification_type, headline),
-    BroadcastAll = get_option(NodeOptions, broadcast_all_resources), %% XXX this is not standard, but usefull
-    From = service_jid(Host),
-    Stanza = add_message_type(BaseStanza, NotificationType),
-    %% Handles explicit subscriptions
-    SubIDsByJID = subscribed_nodes_by_jid(NotifyType, SubsByDepth),
-    lists:foreach(fun ({LJID, _NodeName, SubIDs}) ->
+	broadcast_stanza2(Host, _Node, _Nidx, _Type, NodeOptions, SubsByDepth, NotifyType, BaseStanza, SHIM).
+%%    NotificationType = get_option(NodeOptions, notification_type, headline),
+%%    BroadcastAll = get_option(NodeOptions, broadcast_all_resources), %% XXX this is not standard, but usefull
+%%    From = service_jid(Host),
+%%    Stanza = add_message_type(BaseStanza, NotificationType),
+%%    %% Handles explicit subscriptions
+%%	  Start=os:timestamp(),
+%%    SubIDsByJID = subscribed_nodes_by_jid(NotifyType, SubsByDepth),
+%%    lists:foreach(fun ({LJID, _NodeName, SubIDs}) ->
+%%		LJIDs = case BroadcastAll of
+%%		    true ->
+%%			{U, S, _} = LJID,
+%%			[{U, S, R} || R <- user_resources(U, S)];
+%%		    false ->
+%%			[LJID]
+%%		end,
+%%		%% Determine if the stanza should have SHIM ('SubID' and 'name') headers
+%%		StanzaToSend = case {SHIM, SubIDs} of
+%%		    {false, _} ->
+%%			Stanza;
+%%		    %% If there's only one SubID, don't add it
+%%		    {true, [_]} ->
+%%			Stanza;
+%%		    {true, SubIDs} ->
+%%			add_shim_headers(Stanza, subid_shim(SubIDs))
+%%		end,
+%%		lists:foreach(fun(To) ->
+%%			    ejabberd_router:route2(From, jid:make(To), StanzaToSend)
+%%		    end, LJIDs)
+%%	end, SubIDsByJID),
+%%	Cost=timer:now_diff(os:timestamp(), Start)/1000,
+%%	?INFO_MSG("broad stanza cost:~w~p~n",[Cost,self()]).
+
+broadcast_stanza2(Host, _Node, _Nidx, _Type, NodeOptions, SubsByDepth, NotifyType, BaseStanza, SHIM) ->
+	NotificationType = get_option(NodeOptions, notification_type, headline),
+	BroadcastAll = get_option(NodeOptions, broadcast_all_resources), %% XXX this is not standard, but usefull
+	From = service_jid(Host),
+	Stanza = add_message_type(BaseStanza, NotificationType),
+	%% Handles explicit subscriptions
+	Start=os:timestamp(),
+	SubIDsByJID = subscribed_nodes_by_jid(NotifyType, SubsByDepth),
+	    lists:foreach(fun ({LJID, _NodeName, SubIDs}) ->
 		LJIDs = case BroadcastAll of
 		    true ->
 			{U, S, _} = LJID,
@@ -3372,7 +3463,9 @@ broadcast_stanza(Host, _Node, _Nidx, _Type, NodeOptions, SubsByDepth, NotifyType
 		lists:foreach(fun(To) ->
 			    ejabberd_router:route(From, jid:make(To), StanzaToSend)
 		    end, LJIDs)
-	end, SubIDsByJID).
+	end, SubIDsByJID),
+	Cost=timer:now_diff(os:timestamp(), Start)/1000,
+	?INFO_MSG("MYTEST6 broad stanza 2 cost:~p~n",[Cost]).
 
 broadcast_stanza({LUser, LServer, LResource}, Publisher, Node, Nidx, Type, NodeOptions, SubsByDepth, NotifyType, BaseStanza, SHIM) ->
     broadcast_stanza({LUser, LServer, <<>>}, Node, Nidx, Type, NodeOptions, SubsByDepth, NotifyType, BaseStanza, SHIM),
@@ -3397,63 +3490,128 @@ broadcast_stanza(Host, _Publisher, Node, Nidx, Type, NodeOptions, SubsByDepth, N
     broadcast_stanza(Host, Node, Nidx, Type, NodeOptions, SubsByDepth, NotifyType, BaseStanza, SHIM).
 
 subscribed_nodes_by_jid(NotifyType, SubsByDepth) ->
-    NodesToDeliver = fun (Depth, Node, Subs, Acc) ->
-	    NodeName = case Node#pubsub_node.nodeid of
-		{_, N} -> N;
-		Other -> Other
-	    end,
-	    NodeOptions = Node#pubsub_node.options,
-	    lists:foldl(fun({LJID, SubID, SubOptions}, {JIDs, Recipients}) ->
+	subscribed_nodes_by_jid2(NotifyType,SubsByDepth).
+%%    NodesToDeliver = fun (Depth, Node, Subs, Acc) ->
+%%	    NodeName = case Node#pubsub_node.nodeid of
+%%		{_, N} -> N;
+%%		Other -> Other
+%%	    end,
+%%	    NodeOptions = Node#pubsub_node.options,
+%%	    lists:foldl(fun({LJID, SubID, SubOptions}, {JIDs, Recipients}) ->
+%%			case is_to_deliver(LJID, NotifyType, Depth, NodeOptions, SubOptions) of
+%%			    true ->
+%%				case state_can_deliver(LJID, SubOptions) of
+%%				    [] -> {JIDs, Recipients};
+%%				    JIDsToDeliver ->
+%%					lists:foldl(
+%%					    fun(JIDToDeliver, {JIDsAcc, RecipientsAcc}) ->
+%%						    case lists:member(JIDToDeliver, JIDs) of
+%%							%% check if the JIDs co-accumulator contains the Subscription Jid,
+%%							false ->
+%%							    %%  - if not,
+%%							    %%  - add the Jid to JIDs list co-accumulator ;
+%%							    %%  - create a tuple of the Jid, Nidx, and SubID (as list),
+%%							    %%    and add the tuple to the Recipients list co-accumulator
+%%							    {[JIDToDeliver | JIDsAcc],
+%%								[{JIDToDeliver, NodeName, [SubID]}
+%%								    | RecipientsAcc]};
+%%							true ->
+%%							    %% - if the JIDs co-accumulator contains the Jid
+%%							    %%   get the tuple containing the Jid from the Recipient list co-accumulator
+%%							    {_, {JIDToDeliver, NodeName1, SubIDs}} =
+%%								lists:keysearch(JIDToDeliver, 1, RecipientsAcc),
+%%							    %%   delete the tuple from the Recipients list
+%%							    % v1 : Recipients1 = lists:keydelete(LJID, 1, Recipients),
+%%							    % v2 : Recipients1 = lists:keyreplace(LJID, 1, Recipients, {LJID, Nidx1, [SubID | SubIDs]}),
+%%							    %%   add the SubID to the SubIDs list in the tuple,
+%%							    %%   and add the tuple back to the Recipients list co-accumulator
+%%							    % v1.1 : {JIDs, lists:append(Recipients1, [{LJID, Nidx1, lists:append(SubIDs, [SubID])}])}
+%%							    % v1.2 : {JIDs, [{LJID, Nidx1, [SubID | SubIDs]} | Recipients1]}
+%%							    % v2: {JIDs, Recipients1}
+%%							    {JIDsAcc,
+%%								lists:keyreplace(JIDToDeliver, 1,
+%%								    RecipientsAcc,
+%%								    {JIDToDeliver, NodeName1,
+%%									[SubID | SubIDs]})}
+%%						    end
+%%					    end, {JIDs, Recipients}, JIDsToDeliver)
+%%				end;
+%%			    false ->
+%%				{JIDs, Recipients}
+%%			end
+%%		end, Acc, Subs)
+%%    end,
+%%    DepthsToDeliver = fun({Depth, SubsByNode}, Acc1) ->
+%%	    lists:foldl(fun({Node, Subs}, Acc2) ->
+%%			NodesToDeliver(Depth, Node, Subs, Acc2)
+%%		end, Acc1, SubsByNode)
+%%    end,
+%%    {_, JIDSubs} = lists:foldl(DepthsToDeliver, {[], []}, SubsByDepth),
+%%    JIDSubs.
+
+
+subscribed_nodes_by_jid2(NotifyType, SubsByDepth) ->
+	NodesToDeliver = fun (Depth, Node, Subs, Acc) ->
+		NodeName = case Node#pubsub_node.nodeid of
+								 {_, N} -> N;
+								 Other -> Other
+							 end,
+		NodeOptions = Node#pubsub_node.options,
+		lists:foldl(fun({LJID, SubID, SubOptions}, {JIDs, Recipients}) ->
 			case is_to_deliver(LJID, NotifyType, Depth, NodeOptions, SubOptions) of
-			    true ->
-				case state_can_deliver(LJID, SubOptions) of
-				    [] -> {JIDs, Recipients};
-				    JIDsToDeliver ->
-					lists:foldl(
-					    fun(JIDToDeliver, {JIDsAcc, RecipientsAcc}) ->
-						    case lists:member(JIDToDeliver, JIDs) of
-							%% check if the JIDs co-accumulator contains the Subscription Jid,
-							false ->
-							    %%  - if not,
-							    %%  - add the Jid to JIDs list co-accumulator ;
-							    %%  - create a tuple of the Jid, Nidx, and SubID (as list),
-							    %%    and add the tuple to the Recipients list co-accumulator
-							    {[JIDToDeliver | JIDsAcc],
-								[{JIDToDeliver, NodeName, [SubID]}
-								    | RecipientsAcc]};
-							true ->
-							    %% - if the JIDs co-accumulator contains the Jid
-							    %%   get the tuple containing the Jid from the Recipient list co-accumulator
-							    {_, {JIDToDeliver, NodeName1, SubIDs}} =
-								lists:keysearch(JIDToDeliver, 1, RecipientsAcc),
-							    %%   delete the tuple from the Recipients list
-							    % v1 : Recipients1 = lists:keydelete(LJID, 1, Recipients),
-							    % v2 : Recipients1 = lists:keyreplace(LJID, 1, Recipients, {LJID, Nidx1, [SubID | SubIDs]}),
-							    %%   add the SubID to the SubIDs list in the tuple,
-							    %%   and add the tuple back to the Recipients list co-accumulator
-							    % v1.1 : {JIDs, lists:append(Recipients1, [{LJID, Nidx1, lists:append(SubIDs, [SubID])}])}
-							    % v1.2 : {JIDs, [{LJID, Nidx1, [SubID | SubIDs]} | Recipients1]}
-							    % v2: {JIDs, Recipients1}
-							    {JIDsAcc,
-								lists:keyreplace(JIDToDeliver, 1,
-								    RecipientsAcc,
-								    {JIDToDeliver, NodeName1,
-									[SubID | SubIDs]})}
-						    end
-					    end, {JIDs, Recipients}, JIDsToDeliver)
-				end;
-			    false ->
-				{JIDs, Recipients}
+				true ->
+					case state_can_deliver(LJID, SubOptions) of
+						[] -> {JIDs, Recipients};
+						JIDsToDeliver ->
+%%							?INFO_MSG("jidstodeliver length:~p~n",[length(JIDsToDeliver)]),
+							lists:foldl(
+								fun(JIDToDeliver, {JIDsAcc, RecipientsAcc}) ->
+									{[JIDToDeliver | JIDsAcc],
+										[{JIDToDeliver, NodeName, [SubID]}
+											| RecipientsAcc]}
+%%									case lists:member(JIDToDeliver, JIDs) of
+%%										%% check if the JIDs co-accumulator contains the Subscription Jid,
+%%										false ->
+%%											%%  - if not,
+%%											%%  - add the Jid to JIDs list co-accumulator ;
+%%											%%  - create a tuple of the Jid, Nidx, and SubID (as list),
+%%											%%    and add the tuple to the Recipients list co-accumulator
+%%											{[JIDToDeliver | JIDsAcc],
+%%												[{JIDToDeliver, NodeName, [SubID]}
+%%													| RecipientsAcc]};
+%%										true ->
+%%											%% - if the JIDs co-accumulator contains the Jid
+%%											%%   get the tuple containing the Jid from the Recipient list co-accumulator
+%%											{_, {JIDToDeliver, NodeName1, SubIDs}} =
+%%												lists:keysearch(JIDToDeliver, 1, RecipientsAcc),
+%%											%%   delete the tuple from the Recipients list
+%%											% v1 : Recipients1 = lists:keydelete(LJID, 1, Recipients),
+%%											% v2 : Recipients1 = lists:keyreplace(LJID, 1, Recipients, {LJID, Nidx1, [SubID | SubIDs]}),
+%%											%%   add the SubID to the SubIDs list in the tuple,
+%%											%%   and add the tuple back to the Recipients list co-accumulator
+%%											% v1.1 : {JIDs, lists:append(Recipients1, [{LJID, Nidx1, lists:append(SubIDs, [SubID])}])}
+%%											% v1.2 : {JIDs, [{LJID, Nidx1, [SubID | SubIDs]} | Recipients1]}
+%%											% v2: {JIDs, Recipients1}
+%%											{JIDsAcc,
+%%												lists:keyreplace(JIDToDeliver, 1,
+%%													RecipientsAcc,
+%%													{JIDToDeliver, NodeName1,
+%%														[SubID | SubIDs]})}
+%%									end
+								end, {JIDs, Recipients}, JIDsToDeliver)
+					end;
+				false ->
+					{JIDs, Recipients}
 			end
-		end, Acc, Subs)
-    end,
-    DepthsToDeliver = fun({Depth, SubsByNode}, Acc1) ->
-	    lists:foldl(fun({Node, Subs}, Acc2) ->
+								end, Acc, Subs)
+									 end,
+	DepthsToDeliver = fun({Depth, SubsByNode}, Acc1) ->
+		lists:foldl(fun({Node, Subs}, Acc2) ->
 			NodesToDeliver(Depth, Node, Subs, Acc2)
-		end, Acc1, SubsByNode)
-    end,
-    {_, JIDSubs} = lists:foldl(DepthsToDeliver, {[], []}, SubsByDepth),
-    JIDSubs.
+								end, Acc1, SubsByNode)
+										end,
+	{_, JIDSubs} = lists:foldl(DepthsToDeliver, {[], []}, SubsByDepth),
+	JIDSubs.
 
 user_resources(User, Server) ->
     ejabberd_sm:get_user_resources(User, Server).
@@ -3960,16 +4118,20 @@ config(ServerHost, Key, Default) ->
     end.
 
 select_type(ServerHost, Host, Node, Type) ->
+	?INFO_MSG("mod_pubsub select type:~p ~p ~p ~p~n",[ServerHost,Host,Node,Type]),
     SelectedType = case Host of
 	{_User, _Server, _Resource} ->
+		?INFO_MSG("mod_pubsub select type host is:~p ~p ~p ~p~n",[ServerHost,Host,Node,Type]),
 	    case config(ServerHost, pep_mapping) of
 		undefined -> ?PEPNODE;
 		Mapping -> proplists:get_value(Node, Mapping, ?PEPNODE)
 	    end;
 	_ ->
+		?INFO_MSG("mod_pubsub select type host is not:~p ~p ~p ~p~n",[ServerHost,Host,Node,Type]),
 	    Type
     end,
     ConfiguredTypes = plugins(Host),
+	?INFO_MSG("mod_pubsub select type:~p ~p ~p ~p ~p ~p~n",[ServerHost,Host,Node,Type,SelectedType,ConfiguredTypes]),
     case lists:member(SelectedType, ConfiguredTypes) of
 	true -> SelectedType;
 	false -> hd(ConfiguredTypes)
@@ -4058,9 +4220,10 @@ tree_action(Host, Function, Args) ->
 node_call(Host, Type, Function, Args) ->
     ?DEBUG("node_call ~p ~p ~p", [Type, Function, Args]),
     Module = plugin(Host, Type),
+%%	?INFO_MSG("MYTEST9 mod_pubsub node_call:~p ~p ~p~n",[Host,Type,Module]),
     case apply(Module, Function, Args) of
 	{result, Result} ->
-	    {result, Result};
+			{result, Result};
 	{error, Error} ->
 	    {error, Error};
 	{'EXIT', {undef, Undefined}} ->
