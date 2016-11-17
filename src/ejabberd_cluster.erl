@@ -55,10 +55,13 @@ multicall(Nodes, Module, Function, Args) ->
 -spec join(node()) -> ok | {error, any()}.
 
 join(Node) ->
+    ?INFO_MSG("MYTEST10 ejabberd_cluster join:~p~n",[Node]),
     case {node(), net_adm:ping(Node)} of
         {Node, _} ->
+            ?INFO_MSG("MYTEST10 ejabberd_cluster join not master:~p~n",[Node]),
             {error, {not_master, Node}};
         {_, pong} ->
+            ?INFO_MSG("MYTEST10 ejabberd_cluster join receive pong:~p~n",[Node]),
             application:stop(ejabberd),
             application:stop(mnesia),
             mnesia:delete_schema([node()]),
@@ -73,6 +76,7 @@ join(Node) ->
                 end),
             application:start(ejabberd);
         _ ->
+            ?INFO_MSG("MYTEST10 ejabberd_cluster join error:~p~n",[Node]),
             {error, {no_ping, Node}}
     end.
 

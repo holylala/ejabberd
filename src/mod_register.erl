@@ -431,7 +431,7 @@ try_register(User, Server, Password, SourceRaw, Lang) ->
 				  remove_timeout(Source),
 				  case Error of
 				    {atomic, exists} ->
-				    
+				  %% zhuming we use the following code to promise repeatedlly register,which means if the user already registered,then we will change his password
 					%%Txt = <<"User already exists">>,
                                         %%{error, ?ERRT_CONFLICT(Lang, Txt)};
                                         %%?INFO_MSG("i am test change password by administrator:~p",[User]),

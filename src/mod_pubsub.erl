@@ -317,7 +317,7 @@ init([ServerHost, Opts]) ->
 %%		?NS_PUBSUB, ?MODULE, iq_sm, IQDisc),
 %%	    gen_iq_handler:add_iq_handler(ejabberd_sm, ServerHost,
 %%		?NS_PUBSUB_OWNER, ?MODULE, iq_sm, IQDisc);
-%%   we use ejabberd local iq handler ,notice host not the serverhost,because process iq is based on to#lserver,which is pubsub.*
+%%   zhuming we use ejabberd local iq handler ,notice host not the serverhost,because process iq is based on to#lserver,which is pubsub.*
 		gen_iq_handler:add_iq_handler(ejabberd_local, Host,
 			?NS_PUBSUB, ?MODULE, iq_sm, IQDisc),
 		gen_iq_handler:add_iq_handler(ejabberd_local, Host,
@@ -985,8 +985,8 @@ do_route(ServerHost, Access, Plugins, Host, From, To, Packet) ->
 %%			    ejabberd_router:route(To, From, Res),
 %%					Cost2=timer:now_diff(os:timestamp(),Start)/1000,
 %%			?INFO_MSG("MYTEST6 all cost:~p~n",[Cost2]);
+				%% we use the iq_handler to process pubsub which can be parallel,not the originally one thread.
 				ejabberd_local:route(From,To,Packet);
-%%				process_iq(From,To,IQ);
 			#iq{type = IQType, xmlns = ?NS_PUBSUB_OWNER, lang = Lang, sub_el = SubEl} = IQ ->
 			    Res = case iq_pubsub_owner(Host, ServerHost, From,
 				    IQType, SubEl, Lang)
@@ -1188,6 +1188,7 @@ iq_disco_items(Host, Item, From, RSM) ->
 -spec iq_sm(From :: jid(), To :: jid(), IQ :: iq_request()) -> iq_result() | iq_error().
 iq_sm(From, To, #iq{type = Type, sub_el = SubEl, xmlns = XMLNS, lang = Lang} = IQ) ->
 %%	?INFO_MSG("mod pubsub iq_sm :~p~n",[IQ]),
+	%%zhuming we use ServerHost and Host not the LOwner,which is not compatible with the originally one thread process
     Host = To#jid.lserver,
 	  ServerHost=ejabberd_regexp:replace(Host,<<"pubsub.">>,<<"">>),
     LOwner = jid:tolower(jid:remove_resource(To)),
@@ -3566,6 +3567,7 @@ subscribed_nodes_by_jid2(NotifyType, SubsByDepth) ->
 %%							?INFO_MSG("jidstodeliver length:~p~n",[length(JIDsToDeliver)]),
 							lists:foldl(
 								fun(JIDToDeliver, {JIDsAcc, RecipientsAcc}) ->
+									%% zhuming because we donnot use tree node ,therefore we donnot need get rid of repeatedlly subscription,which is much faster
 									{[JIDToDeliver | JIDsAcc],
 										[{JIDToDeliver, NodeName, [SubID]}
 											| RecipientsAcc]}

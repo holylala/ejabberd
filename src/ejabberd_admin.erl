@@ -410,6 +410,7 @@ reload_config() ->
 %%%
 
 join_cluster(NodeBin) ->
+	  ?INFO_MSG("MYTEST10 ejabberd_admin join_cluster:~p~n",[NodeBin]),
     ejabberd_cluster:join(list_to_atom(binary_to_list(NodeBin))).
 
 leave_cluster(NodeBin) ->
